@@ -1,8 +1,10 @@
 import regex as re
 import os, sys, time
-import logging, requests
+import logging, requests, yaml
 from pathlib import Path
 from collections import defaultdict
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
@@ -12,12 +14,28 @@ from utils.constants import BASE_URL, LANGUAGES, scanlation_groups
 
 logger = logging.getLogger(__name__)
 
-class Manga:
+class MangaDex:
     
     def __init__(self, search_title):
         self.search_title = search_title
         self.filters = scanlation_groups
+        self.session = requests.Session()
+        
+        retry_strategy = Retry(
+            total=5,
+            backoff_factor=3,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET"]
+        )
+        
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+        
+        
         self.id, self.title = self.get_id()
+        self.main_folder = Path("Mangadex") / self.folder_name
         self.chapters = self.get_chapters()
         
     @property
@@ -36,7 +54,7 @@ class Manga:
         }
         
         logger.debug(f"Manga Request URL: {BASE_URL}/manga. Params: {params}")
-        r_manga = requests.get(f"{BASE_URL}/manga", params=params)
+        r_manga = self.session.get(f"{BASE_URL}/manga", params=params)
         
         data = r_manga.json().get("data", [])
         
@@ -143,8 +161,14 @@ class Manga:
     def __look_up_cover(self, manga_chapters):
         logger.info("Start of the look up for covers")
         
-        logger.debug(f"Covers Request URL: {BASE_URL}/cover, Params: 'manga[]' : {self.id}, 'limit': 100, locales[]: 'ja', locales[]: 'zh'")
-        r_covers = requests.get(f"{BASE_URL}/cover",params={"manga[]": self.id, "limit": 100,"locales[]": "ja"}).json()['data']
+        params = {
+            "manga[]": self.id, 
+            "limit": 100,
+            "locales[]": ["ja", "zh"]
+        }
+        
+        logger.debug(f"Covers Request URL: {BASE_URL}/cover, Params: {params}")
+        r_covers = self.session.get(f"{BASE_URL}/cover",params=params).json()['data']
         covers_data = []
         for cover in r_covers:
             covers_data.append({
@@ -159,13 +183,18 @@ class Manga:
             if vol is not None and '.' not in vol: 
                 cover_lookup[int(vol)] = cover["id"]
         
+        previous_cover_id = cover_lookup.get(1)
+        if previous_cover_id is None and cover_lookup:
+            previous_cover_id = list(cover_lookup.values())[0]
+        
         for chapter in manga_chapters:
             chapter_vol = chapter.get("volume")
             if chapter_vol in cover_lookup:
-                chapter["cover_id"] = ("https://uploads.mangadex.org",cover_lookup[chapter_vol])
+                previous_cover_id = cover_lookup[chapter_vol]
+                chapter["cover_id"] = ("https://uploads.mangadex.org", previous_cover_id)
                 logger.debug(f"Chapter: {chapter}")
             else:
-                chapter["cover_id"] = ("https://uploads.mangadex.org",cover_lookup.get(1))
+                chapter["cover_id"] = ("https://uploads.mangadex.org", previous_cover_id)
                 logger.debug(f"Chapter: {chapter}")
 
         logger.info("End of the look up for covers")
@@ -186,7 +215,7 @@ class Manga:
         logger.info(f"Start of getting the Chapters for the Manga: {self.title}")
         logger.debug(f"Chapter Request URL: {BASE_URL}/manga/{self.id}/feed, Params: 'translatedLanguage[]' : {LANGUAGES}")
         
-        r_chapters = requests.get(
+        r_chapters = self.session.get(
             f"{BASE_URL}/manga/{self.id}/feed",
             params={
                 "translatedLanguage[]": LANGUAGES,
@@ -204,10 +233,10 @@ class Manga:
             for relationship in chapter["relationships"]:
                 if relationship['type'] == "scanlation_group":
                     logger.debug(f"Scanlation Group Request URL: {BASE_URL}/group/{relationship['id']}")
-                    scanlation_names.append(requests.get(f"{BASE_URL}/group/{relationship['id']}").json()["data"]["attributes"]["name"])
+                    scanlation_names.append(self.session.get(f"{BASE_URL}/group/{relationship['id']}").json()["data"]["attributes"]["name"])
                 elif relationship['type'] == "user":
                     logger.debug(f"User Request URL: {BASE_URL}/user/{relationship['id']}")
-                    user_names.append(requests.get(f"{BASE_URL}/user/{relationship['id']}").json()["data"]["attributes"]["username"])
+                    user_names.append(self.session.get(f"{BASE_URL}/user/{relationship['id']}").json()["data"]["attributes"]["username"])
             
             if not ((set(scanlation_names) & set(self.filters['preferred_groups'])) or (set(user_names) & set(self.filters['preferred_users']))):
                 logger.info(f"Skip - Scanlation: {set(scanlation_names)}, User: {set(user_names)}")
@@ -229,15 +258,15 @@ class Manga:
         manga_chapters = []
         for chapter in raw_chapters:
             
-            folder_path = f"Mangadex/{self.folder_name}/Volume_{chapter['volume']}/Chapter_{chapter['chapter']}"
+            folder_path = self.main_folder / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
             if os.path.isdir(folder_path) and os.listdir(folder_path):
                 logger.info(f"Skip API: {chapter['id']} - Chapter {chapter['chapter']} already exists locally")
                 continue
             
-            time.sleep(1)
+            time.sleep(1.1)
             
             logger.debug(f"Img Server Request URL: {BASE_URL}/at-home/server/{chapter['id']}")
-            r_img = requests.get(f"{BASE_URL}/at-home/server/{chapter['id']}").json()
+            r_img = self.session.get(f"{BASE_URL}/at-home/server/{chapter['id']}").json()
             
             chapter["base_url"] = r_img["baseUrl"]
             chapter["img_data"] = [(r_img["chapter"]["hash"], img_path) for img_path in r_img["chapter"]["data"]]
@@ -258,16 +287,15 @@ class Manga:
     def download(self):
         logger.info("Start of the download of each chapter")
         for chapter in self.chapters:
-            time.sleep(1)
             logger.info(f"Downloading: {chapter['id']} - Chapter {chapter['chapter']} - {chapter['scanlation_group']}")
             
-            folder_path = Path("Mangadex") / self.folder_name / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
+            folder_path = self.main_folder / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
             logger.debug(f"Path to save the Mangas: {folder_path}")
             
             folder_path.mkdir(parents=True, exist_ok=True)
             
             logger.debug(f"Cover Img Request URL: {chapter['cover_id'][0]}/covers/{self.id}/{chapter['cover_id'][1]}")
-            r_img_cover = requests.get(f"{chapter['cover_id'][0]}/covers/{self.id}/{chapter['cover_id'][1]}")
+            r_img_cover = self.session.get(f"{chapter['cover_id'][0]}/covers/{self.id}/{chapter['cover_id'][1]}")
 
             full_path = folder_path / f"SCT1-{chapter['cover_id'][1]}"
             with open(str(full_path), mode="wb") as f:
@@ -275,14 +303,30 @@ class Manga:
             
             count = 2
             for page in chapter['img_data']:
+                time.sleep(0.2)
                 full_path = folder_path / f"SCT{count}-{chapter['cover_id'][1]}"
                 
                 logger.debug(f"Chapter Img Request URL: {chapter['base_url']}/data/{page[0]}/{page[1]}")
                 logger.debug(f"Path to save the Img: {full_path}")
-                r_chapter_img = requests.get(f"{chapter['base_url']}/data/{page[0]}/{page[1]}")
+                r_chapter_img = self.session.get(f"{chapter['base_url']}/data/{page[0]}/{page[1]}")
                 with open(str(full_path), mode="wb") as f:
                     f.write(r_chapter_img.content)
                 count += 1
 
             logger.info(f"Downloaded {len(chapter['img_data'])} pages.")
-            
+        logger.info("End of the download of each chapter")
+        self.__metadata()
+        
+    def __metadata(self):
+        logger.info("Start of metadata creation")
+        data = {
+            "metadata": {
+                "name": self.title,
+                "id": self.id,
+                "last_volume": max([chapter['volume'] for chapter in self.chapters]),
+                "last_chapter": max([chapter['chapter'] for chapter in self.chapters])
+            }
+        }
+        logger.debug(f"Metadata: {data}")
+        with open(str(self.main_folder / ".metadata.yml"), mode="w") as file:
+            yaml.dump(data, file, encoding='utf-8', allow_unicode=True)

@@ -5,7 +5,7 @@ import logging,argparse
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
-from src.classes import Manga
+from src.classes import MangaDex
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -51,34 +51,30 @@ if __name__ == "__main__":
         print("\nWelcome to the Universal Scraper!")
         print("1. Download Manga")
         print("2. Download Novel")
-        
-        choice = input("Select an option (1/2): ")
+        print("3. Exit")
+        choice = input("Select an option: ")
         
         if choice == "1":
             print("Manga Menu:")
             print("1. Write a Manga")
             print("2. List")
-            choice = input("Select an option (1/2): ")
+            choice = input("Select an option: ")
             
             if choice == "1":
                 manga_name = input("Write Manga name: ")
-                manga = Manga(manga_name)
+                manga = MangaDex(manga_name)
                 manga.download()
 
             elif choice == "2":
                 manga_list = [
-                    # "Please Bully Me, Miss Villainess!",
-                    "Goshujinsama to Yuku Isekai Survival!",
-                    "sekai Shounin - Skill <Isekai Tokou> wo Kushi Shite, Yuuyuu Jiteki na Okanemochi Slow Life wo Okurimasu",
-                    "Tsuki ga Michibiku Isekai Douchuu",
-                    "Netachara-Tensei Toka Anmarida!"
+                    "Isekai Tensei Dungeon Master: Onsen Dungeon o Tsukuru"
                 ]
                 
                 if not manga_list:
                     print("There is no mangas in the list")
                 
                 for manga_name in manga_list:
-                    manga = Manga(manga_name)
+                    manga = MangaDex(manga_name)
                     manga.download()
 
             else:
@@ -88,6 +84,9 @@ if __name__ == "__main__":
             # novel = Novel("Lord of the Mysteries")
             # novel.download_text()
             print("Novel scraper not yet implemented.")
-            
+        
+        elif choice == "3":
+            sys.exit("Exit application")
+        
         else:
             print("Invalid choice. Select only the valid options.")

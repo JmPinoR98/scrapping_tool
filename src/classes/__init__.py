@@ -1,3 +1,3 @@
-from .manga import Manga
+from .manga import MangaDex
 
-__all__ = ["Manga"]
+__all__ = ["MangaDex"]
