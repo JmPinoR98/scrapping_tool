@@ -1,49 +1,27 @@
-import regex as re
+import shutil
+import logging
 import os, sys, time
-import logging, requests, yaml
-from pathlib import Path
 from collections import defaultdict
-from urllib3.util.retry import Retry
-from requests.adapters import HTTPAdapter
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
+from .base import BaseScraper
 from utils.constants import BASE_URL, LANGUAGES, scanlation_groups
 
 logger = logging.getLogger(__name__)
 
-class MangaDex:
+class MangaDexScraper(BaseScraper):
     
     def __init__(self, search_title):
-        self.search_title = search_title
-        self.filters = scanlation_groups
-        self.session = requests.Session()
-        
-        retry_strategy = Retry(
-            total=5,
-            backoff_factor=3,
-            status_forcelist=[429, 500, 502, 503, 504],
-            allowed_methods=["GET"]
-        )
-        
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
-        
-        
-        self.id, self.title = self.get_id()
-        self.main_folder = Path("Mangadex") / self.folder_name
+        super().__init__(search_title)
+        self.site_name = "MangaDex"
+        self.id, self.title = self._get_id()
+        self.url_id = f'https://www.mangadex.org/title/{self.id}'
         self.chapters = self.get_chapters()
-        
-    @property
-    def folder_name(self):
-        clean = re.sub(r'[^a-zA-Z0-9 ]', '', self.title)
-        return (clean[:60].strip()) if len(clean) > 60 else clean
     
-    def get_id(self):
+    def _get_id(self):
         logger.info(f"Start of getting the ID of the manga: {self.search_title}")
         
         params = {
@@ -121,7 +99,7 @@ class MangaDex:
             logger.debug(f"Grouped Data Subchapter: Volume: {sub_key[0]}, Chapter: {sub_key[1]}, Subchapter: {sub_key[2]}, items: {items}")
             if len(items) > 1:
                 items.sort(key=lambda x: min(
-                    self.filters['preferred_groups'].index(y) if y in self.filters['preferred_groups'] else 999 
+                    scanlation_groups['preferred_groups'].index(y) if y in scanlation_groups['preferred_groups'] else 999 
                     for y in x['scanlation_group']
                 ))
             best_unique_chapters.append(items[0])
@@ -150,7 +128,12 @@ class MangaDex:
                 base_item['img_data'] = combined_img_data
                 base_item['scanlation_group'] = combined_groups
             
-            base_item['sub_chapter'] = None 
+            all_sub_chapters = [
+                sub.get('sub_chapter') for sub in items 
+                if sub.get('sub_chapter') is not None
+            ]
+            
+            base_item['sub_chapter'] = max(all_sub_chapters) if all_sub_chapters else 0 
             base_item['title'] = f"Vol. {volume} Ch. {chapter}"
             
             logger.debug(f"Merged Data: {base_item} - Groups: {base_item['scanlation_group']}")
@@ -215,6 +198,7 @@ class MangaDex:
         logger.info(f"Start of getting the Chapters for the Manga: {self.title}")
         logger.debug(f"Chapter Request URL: {BASE_URL}/manga/{self.id}/feed, Params: 'translatedLanguage[]' : {LANGUAGES}")
         
+        last_chapter, sub_chapter = self.db.get_last_chapter(self.url_id)
         r_chapters = self.session.get(
             f"{BASE_URL}/manga/{self.id}/feed",
             params={
@@ -238,7 +222,7 @@ class MangaDex:
                     logger.debug(f"User Request URL: {BASE_URL}/user/{relationship['id']}")
                     user_names.append(self.session.get(f"{BASE_URL}/user/{relationship['id']}").json()["data"]["attributes"]["username"])
             
-            if not ((set(scanlation_names) & set(self.filters['preferred_groups'])) or (set(user_names) & set(self.filters['preferred_users']))):
+            if not ((set(scanlation_names) & set(scanlation_groups['preferred_groups'])) or (set(user_names) & set(scanlation_groups['preferred_users']))):
                 logger.info(f"Skip - Scanlation: {set(scanlation_names)}, User: {set(user_names)}")
                 continue
             
@@ -249,7 +233,7 @@ class MangaDex:
                 "user": user_names,
                 "volume" : int(chapter['attributes']['volume']) if chapter['attributes']['volume'] is not None else None,
                 "chapter" : int(chapter['attributes']['chapter'].split('.')[0]),
-                "sub_chapter" : int(chapter['attributes']['chapter'].split('.')[1]) if len(chapter['attributes']['chapter'].split('.')) > 1 else None
+                "sub_chapter" : int(chapter['attributes']['chapter'].split('.')[1]) if len(chapter['attributes']['chapter'].split('.')) > 1 else 0
             })
             logger.debug(f"Manga Chapter: {raw_chapters[-1]}")
         
@@ -258,10 +242,19 @@ class MangaDex:
         manga_chapters = []
         for chapter in raw_chapters:
             
-            folder_path = self.main_folder / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
-            if os.path.isdir(folder_path) and os.listdir(folder_path):
-                logger.info(f"Skip API: {chapter['id']} - Chapter {chapter['chapter']} already exists locally")
-                continue
+            if last_chapter != 0:
+                if chapter['chapter'] < last_chapter:
+                    logger.info(f"Skip API: {chapter['id']} - Chapter {chapter['chapter']} already exists locally")
+                    continue
+                elif chapter['chapter'] == last_chapter:
+                    if chapter['sub_chapter'] <= sub_chapter:
+                        logger.info(f"Skip API: {chapter['id']} - Chapter {chapter['chapter']} (Sub {chapter['sub_chapter']}) already exists locally")
+                        continue
+                    else:
+                        folder_path = self.main_folder / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
+                        if folder_path.exists():
+                            logger.debug(f"Deleting: {chapter['id']} - Chapter {chapter['chapter']} already exists locally")
+                            shutil.rmtree(folder_path)
             
             time.sleep(1.1)
             
@@ -275,9 +268,8 @@ class MangaDex:
             logger.debug(f"Manga Chapter: {manga_chapters[-1]}")
         
         if not manga_chapters:
-            exit_message = "This Manga is up to date! There is no need to download!"
-            logger.info(exit_message)
-            sys.exit()
+            logger.info( "This Manga is up to date! There is no need to download!")
+            return
         
         manga_chapters = self.__look_up_cover(manga_chapters)
         
@@ -315,18 +307,15 @@ class MangaDex:
 
             logger.info(f"Downloaded {len(chapter['img_data'])} pages.")
         logger.info("End of the download of each chapter")
-        self.__metadata()
         
-    def __metadata(self):
-        logger.info("Start of metadata creation")
-        data = {
-            "metadata": {
-                "name": self.title,
-                "id": self.id,
-                "last_volume": max([chapter['volume'] for chapter in self.chapters]),
-                "last_chapter": max([chapter['chapter'] for chapter in self.chapters])
-            }
-        }
-        logger.debug(f"Metadata: {data}")
-        with open(str(self.main_folder / ".metadata.yml"), mode="w") as file:
-            yaml.dump(data, file, encoding='utf-8', allow_unicode=True)
+        latest_chapter_data = max(self.chapters, key=lambda x: x['chapter'])
+        
+        self.db.save_metadata(
+            url_id = self.url_id,
+            site_id = self.id,
+            searched_name = self.search_title,
+            saved_name = self.title,
+            last_chapter = latest_chapter_data['chapter'],
+            sub_chapter = latest_chapter_data['sub_chapter'],
+            media_type = 'manga'
+        )

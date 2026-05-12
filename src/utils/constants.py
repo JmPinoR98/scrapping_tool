@@ -48,6 +48,7 @@ scanlation_groups = {
         "Aphrodite Scans",
         "Daddy, Scan me Harder!",
         "Akuyaku Scans",
+        "Skythewood", 
         "Jai Random Scans",
         "Kuma Translation",
         "no sleep group",

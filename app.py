@@ -1,11 +1,12 @@
 # main.py
 import os, sys, json
-import logging,argparse
+import logging
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 from src.classes import MangaDex
+from src.scrappers import MangaDexScraper
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -67,16 +68,17 @@ if __name__ == "__main__":
 
             elif choice == "2":
                 manga_list = [
-                    "Isekai Tensei Dungeon Master: Onsen Dungeon o Tsukuru"
+                    "Romcom Manga ni Haitteshimatta node, Oshi no Make Heroine o Zenryoku de Shiawase ni Suru",
+                    "Chanto Suki tte Ieru Ko Musou"
                 ]
                 
                 if not manga_list:
                     print("There is no mangas in the list")
                 
                 for manga_name in manga_list:
-                    manga = MangaDex(manga_name)
-                    manga.download()
-
+                    manga = MangaDexScraper(manga_name)
+                    if manga.chapters:
+                        manga.download()
             else:
                 print("Invalid choice. Select only the valid options.")
             
