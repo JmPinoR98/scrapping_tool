@@ -8,7 +8,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 from .base import BaseScraper
-from utils.constants import BASE_URL, LANGUAGES, scanlation_groups
+from utils.constants import BASE_URL, LANGUAGES, scanlation_groups, remove_readonly
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +243,8 @@ class MangaDexScraper(BaseScraper):
         for chapter in raw_chapters:
             
             if last_chapter != 0:
-                if chapter['chapter'] < last_chapter:
+                folder_path = self.main_folder / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
+                if chapter['chapter'] < last_chapter and folder_path.exists() and os.listdir(folder_path):
                     logger.info(f"Skip API: {chapter['id']} - Chapter {chapter['chapter']} already exists locally")
                     continue
                 elif chapter['chapter'] == last_chapter:
@@ -251,10 +252,9 @@ class MangaDexScraper(BaseScraper):
                         logger.info(f"Skip API: {chapter['id']} - Chapter {chapter['chapter']} (Sub {chapter['sub_chapter']}) already exists locally")
                         continue
                     else:
-                        folder_path = self.main_folder / f"Volume_{chapter['volume']}" / f"Chapter_{chapter['chapter']}"
                         if folder_path.exists():
                             logger.debug(f"Deleting: {chapter['id']} - Chapter {chapter['chapter']} already exists locally")
-                            shutil.rmtree(folder_path)
+                            shutil.rmtree(folder_path, onexc = remove_readonly)
             
             time.sleep(1.1)
             

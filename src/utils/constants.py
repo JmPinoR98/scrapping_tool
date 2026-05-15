@@ -1,3 +1,5 @@
+import os, stat
+
 BASE_URL = "https://api.mangadex.org"
 LANGUAGES = "en"
 
@@ -12,6 +14,7 @@ scanlation_groups = {
         "Mangasushi",
         "Silicon Signature Swisse ",
         "Blooming Tea Scans",
+        "The Abandoned",
         "3.14rate",
         "Weeblet80",
         "MelonMelonHydra",
@@ -34,8 +37,8 @@ scanlation_groups = {
         "YumScans",
         "potatofoodscans",
         "People of Refined Taste",
+        "Party Scans",
         "Cave Drawings",
-        "The Abandoned",
         "Flame Scans",
         "Flame Comics",
         "Carefree scanlations",
@@ -45,20 +48,47 @@ scanlation_groups = {
         "Wakga",
         "SuNday",
         "XuN",
+        "HAMASCANS",
+        "Chibi Multiverse",
         "Aphrodite Scans",
         "Daddy, Scan me Harder!",
+        "The Fluffy Hangout Group",
+        "FairyScans",
+        "FML Translations",
+        "Endless Journey",
+        "/a/nonymous",
         "Akuyaku Scans",
+        "Vanguard",
+        "Manga Galaxy",
+        "koppisekai"
         "Skythewood", 
         "Jai Random Scans",
         "Kuma Translation",
         "no sleep group",
         "Hunlight Scans",
         "Hatch Potch Cafe",
+        "West",
+        "No Works",
         "Sugoi-Sugoi",
+        "MANA SCANS",
+        "Levscans",
+        "My Darling",
+        "Petrichor",
+        "Einherjar Scan",
+        "Revelion Scan",
+        "M107 Sniper Rifle",
+        "Infinity Scan",
         "Hazue Ishin",
+        "the swaggoneers",
         "INP-Mangaz",
         "Whimsubs",
         "Inferno Scan",
+        "Hero?",
+        "ColorNoobs",
+        "Mistakes Were Made",
+        "Bewitched",
+        "waddles_scans",
+        "abandoned kitten scans",
         "SomethingAboutScans",
         "Not a Scans Scans Group",
         "Neon_Scans",
@@ -72,7 +102,16 @@ scanlation_groups = {
     ],
     "preferred_users": [
         "xxxbatskaterxxx",
-        "Amarrez"
+        "Amarrez",
+        "Quanshiro",
+        "Mino5531",
+        "tonsoftons",
+        "Riko"
     ],
     "blacklisted_groups": []
 }
+
+def remove_readonly(func, path, excinfo):
+    """Clear the readonly bit and re-attempt the removal"""
+    os.chmod(path, stat.S_IWRITE)
+    func(path)

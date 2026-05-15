@@ -5,7 +5,7 @@ import logging
 current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
-from src.classes import MangaDex
+
 from src.scrappers import MangaDexScraper
 
 class JsonFormatter(logging.Formatter):
@@ -63,13 +63,36 @@ if __name__ == "__main__":
             
             if choice == "1":
                 manga_name = input("Write Manga name: ")
-                manga = MangaDex(manga_name)
+                manga = MangaDexScraper(manga_name)
                 manga.download()
 
             elif choice == "2":
                 manga_list = [
-                    "Romcom Manga ni Haitteshimatta node, Oshi no Make Heroine o Zenryoku de Shiawase ni Suru",
-                    "Chanto Suki tte Ieru Ko Musou"
+                    "Isekai demo Bunan ni Ikitai Shoukougun",
+                    "Yasei no Last Boss ga Arawareta!",
+                    "Garbage Brave: Isekai ni Shoukan Sare Suterareta Yuusha no Fukushuu Monogatari",
+                    "Henkyou-gurashi no Maou, Tensei Shite Saikyou no Majutsushi ni Naru",
+                    "Akuyaku Onzoushi no Kanchigai Seija Seikatsu ~Nidome no Jinsei wa Yaritai Houdai Shitai Dake na no ni~",
+                    "Tenkuu no Shiro wo Moratta node Isekai de Tanoshiku Asobitai",
+                    "Magi Craft Meister",
+                    'Isekai de "Kuro no Iyashi Te" tte Yobareteimasu',
+                    "Manadeshi ni Uragirarete Shinda Ossan Yuusha, Shijou Saikyou no Maou to Shite Ikikaeru",
+                    "Zense wa Kentei. Konjou Kuzu Ouji",
+                    "Maou ni Natta node, Dungeon Tsukutte Jingai Musume to Honobono Suru",
+                    "Tondemo Skill de Isekai Hourou Meshi",
+                    "The New Gate",
+                    "Kuro no Shoukanshi",
+                    "Isekai Nonbiri Nouka",
+                    "Genjitsushugi Yuusha no Oukoku Saikenki",
+                    "Hokuo Kizoku to Moukinzuma no Yukiguni Karigurashi",
+                    "Acchi Kocchi",
+                    "Onna Doushi toka Arienai desho to Iiharu Onnanoko wo, Hyakunichikan de Tetteiteki ni Otosu Yuri no Ohanashi",
+                    "Ookami no Kawa o Kabutta Hitsujihime",
+                    'Hazure Skill "Kage ga Usui" o Motsu Guild Shokuin ga, Jitsu wa Densetsu no Ansatsusha',
+                    "Tensei Oujo to Tensai Reijou no Mahou Kakumei",
+                    "Henkyou Mobu Kizoku no Uchi ni Totsuidekita Akuyaku Reijou ga, Mechakucha Dekiru Ii Yome nandaga?",
+                    "Futago no Ane ga Miko to shite Hikitorarete, Watashi wa Suterareta kedo Tabun Watashi ga Miko de aru.",
+                    "Dig It"
                 ]
                 
                 if not manga_list:
